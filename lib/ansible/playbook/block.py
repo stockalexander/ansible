@@ -202,7 +202,7 @@ class Block(Base, Become, Conditional, Taggable):
         '''
 
         data = dict()
-        for attr in self._get_base_attributes():
+        for attr in self._valid_attrs:
             if attr not in ('block', 'rescue', 'always'):
                 data[attr] = getattr(self, attr)
 
@@ -229,7 +229,7 @@ class Block(Base, Become, Conditional, Taggable):
 
         # we don't want the full set of attributes (the task lists), as that
         # would lead to a serialize/deserialize loop
-        for attr in self._get_base_attributes():
+        for attr in self._valid_attrs:
             if attr in data and attr not in ('block', 'rescue', 'always'):
                 setattr(self, attr, data.get(attr))
 
@@ -285,7 +285,7 @@ class Block(Base, Become, Conditional, Taggable):
 
         value = None
         try:
-            value = self._attributes[attr]
+            value = self._attrs[attr]
 
             if self._parent and (value is None or extend):
                 parent_value = getattr(self._parent, attr, None)
