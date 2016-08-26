@@ -865,7 +865,7 @@ class TestModuleUtilsBasic(unittest.TestCase):
                         with patch('os.stat', return_value=mock_stat2):
                             self.assertEqual(am.set_mode_if_different('/path/to/file', 0o660, False), True)
 
-    @patch('tempfile.NamedTemporaryFile')
+    @patch('tempfile.mkstemp')
     @patch('os.umask')
     @patch('shutil.copyfileobj')
     @patch('shutil.move')
@@ -879,8 +879,10 @@ class TestModuleUtilsBasic(unittest.TestCase):
     @patch('os.chmod')
     @patch('os.stat')
     @patch('os.path.exists')
+    @patch('os.close')
     def test_module_utils_basic_ansible_module_atomic_move(
         self,
+        _os_close,
         _os_path_exists,
         _os_stat,
         _os_chmod,
@@ -894,7 +896,7 @@ class TestModuleUtilsBasic(unittest.TestCase):
         _shutil_move,
         _shutil_copyfileobj,
         _os_umask,
-        _tempfile_NamedTemporaryFile,
+        _tempfile_mkstemp,
         ):
 
         from ansible.module_utils import basic
@@ -1027,20 +1029,21 @@ class TestModuleUtilsBasic(unittest.TestCase):
         self.assertRaises(SystemExit, am.atomic_move, '/path/to/src', '/path/to/dest')
 
         # next we test with EPERM so it continues to the alternate code for moving
-        # test with NamedTemporaryFile raising an error first
+        # test with mkstemp raising an error first
         _os_path_exists.side_effect = [False, False]
         _os_getlogin.return_value = 'root'
         _os_getuid.return_value = 0
+        _os_close.return_value = None
         _pwd_getpwuid.return_value = ('root', '', 0, 0, '', '', '')
         _os_umask.side_effect = [18, 0]
         _os_rename.side_effect = [OSError(errno.EPERM, 'failing with EPERM'), None]
-        _tempfile_NamedTemporaryFile.return_value = None
-        _tempfile_NamedTemporaryFile.side_effect = OSError()
+        _tempfile_mkstemp.return_value = None
+        _tempfile_mkstemp.side_effect = OSError()
         am.selinux_enabled.return_value = False
         self.assertRaises(SystemExit, am.atomic_move, '/path/to/src', '/path/to/dest')
 
         # then test with it creating a temp file
-        _os_path_exists.side_effect = [False, False]
+        _os_path_exists.side_effect = [False, False, False]
         _os_getlogin.return_value = 'root'
         _os_getuid.return_value = 0
         _pwd_getpwuid.return_value = ('root', '', 0, 0, '', '', '')
@@ -1051,23 +1054,20 @@ class TestModuleUtilsBasic(unittest.TestCase):
         mock_stat3 = MagicMock()
         _os_stat.return_value = [mock_stat1, mock_stat2, mock_stat3]
         _os_stat.side_effect = None
-        mock_tempfile = MagicMock()
-        mock_tempfile.name = '/path/to/tempfile'
-        _tempfile_NamedTemporaryFile.return_value = mock_tempfile
-        _tempfile_NamedTemporaryFile.side_effect = None
+        _tempfile_mkstemp.return_value = (None, '/path/to/tempfile')
+        _tempfile_mkstemp.side_effect = None
         am.selinux_enabled.return_value = False
         # FIXME: we don't assert anything here yet
         am.atomic_move('/path/to/src', '/path/to/dest')
 
         # same as above, but with selinux enabled
-        _os_path_exists.side_effect = [False, False]
+        _os_path_exists.side_effect = [False, False, False]
         _os_getlogin.return_value = 'root'
         _os_getuid.return_value = 0
         _pwd_getpwuid.return_value = ('root', '', 0, 0, '', '', '')
         _os_umask.side_effect = [18, 0]
         _os_rename.side_effect = [OSError(errno.EPERM, 'failing with EPERM'), None]
-        mock_tempfile = MagicMock()
-        _tempfile_NamedTemporaryFile.return_value = mock_tempfile
+        _tempfile_mkstemp.return_value = (None, None)
         mock_context = MagicMock()
         am.selinux_default_context.return_value = mock_context
         am.selinux_enabled.return_value = True
